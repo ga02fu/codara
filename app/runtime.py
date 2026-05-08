@@ -28,6 +28,7 @@ class ParsedAction:
     final_text: str = ""
     tool_name: str = ""
     tool_args: dict[str, Any] | None = None
+    retry_reason: str = ""
 
 
 class CodaraRuntime:
@@ -196,6 +197,21 @@ class CodaraRuntime:
             if action.kind == "final":
                 task.finish("final_answer_returned")
                 return action.final_text.strip()
+
+            if action.kind == "retry":
+                task.attempts += 1
+                reason = action.retry_reason.strip() or "模型请求继续思考一轮。"
+                self.trace.append(
+                    {
+                        "type": "model_retry",
+                        "at": now_iso(),
+                        "data": reason[:800],
+                    }
+                )
+                _add_runtime_hint(
+                    f"提示：收到 retry 请求（原因：{reason}）。请在下一轮优先收敛到 tool 或 final。"
+                )
+                continue
 
             if action.kind == "tool":
                 task.tool_steps += 1
@@ -460,8 +476,9 @@ class CodaraRuntime:
             "当前输入已由请求重写器整理为“用户请求 + 子任务”结构。\n"
             "你必须优先按子任务序号推进，逐项执行并记录结果。\n"
             "【输出协议】\n"
-            "- 每轮只允许输出一种标签：<tool>...</tool> 或 <final>...</final>。\n"
+            "- 每轮只允许输出一种标签：<tool>...</tool>、<retry>...</retry> 或 <final>...</final>。\n"
             '- 需要调用工具时，唯一合法格式：<tool>{"name":"工具名","args":{...}}</tool>\n'
+            "- 当本轮无需调用工具但仍需继续推理时，输出 <retry>继续原因</retry>。\n"
             "- 能直接回答时，输出 <final>你的答案</final>。\n"
             "- 当请求含多个子任务时，允许部分完成；必须在 <final> 中说明已完成项与失败项。\n"
             "- 生成 <final> 时，按子任务编号输出每项状态（完成/失败）与简要依据。\n"
@@ -486,6 +503,10 @@ class CodaraRuntime:
         final_match = re.search(r"<final>(.*?)</final>", raw, flags=re.S | re.I)
         if final_match:
             return ParsedAction(kind="final", final_text=final_match.group(1).strip())
+
+        retry_match = re.search(r"<retry>(.*?)(?:</retry>|$)", raw, flags=re.S | re.I)
+        if retry_match:
+            return ParsedAction(kind="retry", retry_reason=retry_match.group(1).strip())
 
         tool_match = re.search(r"<tool>(.*?)(?:</tool>|$)", raw, flags=re.S | re.I)
         if tool_match:
