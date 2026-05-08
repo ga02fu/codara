@@ -1,0 +1,1 @@
+& C:\Users\wnc20\Desktop\python\Codara\.venv\Scripts\Activate.ps1

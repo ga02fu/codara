@@ -66,12 +66,45 @@ class CodaraRuntime:
         self.workspace_ctx = WorkspaceContext.build(
             self.workspace_root
         )  # 工作空间上下文
+        self._workspace_dirty = False
+        self._workspace_prompt_rounds = 0
+        self._workspace_refresh_interval = 6
 
         # 把工具记忆总结接入同一 deepseek-chat 模型。
         self.memory.summarize_tool_fn = self._llm_summarize_tool_note
 
     def _new_session_id(self) -> str:
         return uuid.uuid4().hex[:12]
+
+    def _mark_workspace_dirty(self) -> None:
+        self._workspace_dirty = True
+
+    def _maybe_refresh_workspace_context(self) -> None:
+        self._workspace_prompt_rounds += 1
+        need_refresh = self._workspace_dirty or (
+            self._workspace_prompt_rounds % self._workspace_refresh_interval == 0
+        )
+        if not need_refresh:
+            return
+
+        try:
+            self.workspace_ctx = WorkspaceContext.build(self.workspace_root)
+            self._workspace_dirty = False
+            self.trace.append(
+                {
+                    "type": "workspace_refresh",
+                    "at": now_iso(),
+                    "data": {"round": self._workspace_prompt_rounds},
+                }
+            )
+        except Exception as e:
+            self.trace.append(
+                {
+                    "type": "workspace_refresh_error",
+                    "at": now_iso(),
+                    "data": str(e)[:800],
+                }
+            )
 
     def ask(self, user_message: str, already_rewritten: bool = False) -> str:
         """
@@ -168,6 +201,8 @@ class CodaraRuntime:
                     "本轮任务未收敛，已达到尝试上限。请缩小目标或给出更明确的下一步。"
                 )
 
+            self._maybe_refresh_workspace_context()
+
             prompt, prompt_meta = self.context_manager.build_prompt(
                 system_prefix=self._system_prefix(user_message, runtime_hints),
                 workspace_text=self.workspace_ctx.render(),
@@ -253,6 +288,8 @@ class CodaraRuntime:
                             },
                         }
                     )
+                    if tool_name in {"write_file", "patch_file", "run_shell"}:
+                        self._mark_workspace_dirty()
 
                     # 对创建/写入类任务做快速收敛，避免完成后仍反复探测触发上限。
                     if self._is_write_like_request(user_message) and tool_name in {
@@ -553,6 +590,9 @@ class CodaraRuntime:
         self.trace.clear()
         self.memory = LayeredMemory()
         self.memory.summarize_tool_fn = self._llm_summarize_tool_note
+        self.workspace_ctx = WorkspaceContext.build(self.workspace_root)
+        self._workspace_dirty = False
+        self._workspace_prompt_rounds = 0
         self.session_id = self._new_session_id()
 
     @classmethod
