@@ -1,0 +1,76 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment files
+.env
+.env.*
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Test / type-check / coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Logs
+*.log
+
+# Local runtime/session store
+.codara/
+*.sqlite3
+
+# Editor / IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Compiled extensions
+*.so
+*.pyd
+
+# Wheels
+*.whl
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# JetBrains
+*.iml
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Coverage / caches
+coverage.xml
+.cache/
+
+# Temporary files
+*.tmp
+*.swp
+*~
